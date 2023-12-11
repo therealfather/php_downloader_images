@@ -20,26 +20,36 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $username = $_POST["username"];
     $password = password_hash($_POST["password"], PASSWORD_DEFAULT);
 
-    // Verificare dacă utilizatorul există deja
-    $checkQuery = "SELECT id FROM users WHERE username = '$username'";
-    $result = $conn->query($checkQuery);
+    // Verificare dacă utilizatorul există deja utilizând instrucțiuni pregătite
+    $checkQuery = "SELECT id FROM users WHERE username = ?";
+    $checkStmt = $conn->prepare($checkQuery);
+    $checkStmt->bind_param("s", $username);
+    $checkStmt->execute();
+    $checkStmt->store_result();
 
-    if ($result->num_rows > 0) {
+    if ($checkStmt->num_rows > 0) {
         echo "Acest utilizator există deja!";
     } else {
-        // Adăugare utilizator nou în baza de date
-        $insertQuery = "INSERT INTO users (username, password) VALUES ('$username', '$password')";
+        // Adăugare utilizator nou în baza de date utilizând instrucțiuni pregătite
+        $insertQuery = "INSERT INTO users (username, password) VALUES (?, ?)";
+        $insertStmt = $conn->prepare($insertQuery);
+        $insertStmt->bind_param("ss", $username, $password);
 
-        if ($conn->query($insertQuery) === TRUE) {
+        if ($insertStmt->execute()) {
             $successMessage = "Înregistrare reușită!";
 
             // Adaugă un link pentru a reveni la pagina de login
             $successMessage .= ' <a href="login.php">Autentificare</a>';
         } else {
-            echo "Eroare la înregistrare: " . $conn->error;
+            echo "Eroare la înregistrare: " . $insertStmt->error;
         }
+
+        $insertStmt->close();
     }
+
+    $checkStmt->close();
 }
+
 $conn->close();
 ?>
 <!DOCTYPE html>

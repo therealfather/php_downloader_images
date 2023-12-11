@@ -19,28 +19,41 @@ if ($conn->connect_error) {
     die("Conexiune esuata: " . $conn->connect_error);
 }
 
+// Variabilă pentru mesajele de eroare la autentificare
+$login_err = "";
+
 // Procesare formular de logare
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $username = $_POST["username"];
     $password = $_POST["password"];
 
-    // Verificare utilizator în baza de date
-    $checkQuery = "SELECT id, username, password FROM users WHERE username = '$username'";
-    $result = $conn->query($checkQuery);
+    // Verificare utilizator în baza de date utilizând instrucțiuni pregătite
+    $checkQuery = "SELECT id, username, password, is_admin FROM users WHERE username = ?";
+    $checkStmt = $conn->prepare($checkQuery);
+    $checkStmt->bind_param("s", $username);
+    $checkStmt->execute();
+    $checkStmt->store_result();
 
-    if ($result->num_rows > 0) {
-        $row = $result->fetch_assoc();
-        if (password_verify($password, $row["password"])) {
-            session_start();
-            $_SESSION["loggedin"] = true;
+    if ($checkStmt->num_rows > 0) {
+        $checkStmt->bind_result($id, $dbUsername, $hashed_password, $is_admin);
+        $checkStmt->fetch();
+
+        if (password_verify($password, $hashed_password)) {
             $_SESSION["username"] = $username;
-            header("location: welcome.php");
+
+            // Setează variabila de sesiune isAdmin în funcție de valoarea din baza de date
+            $_SESSION["isAdmin"] = ($is_admin == 1);
+
+            header("location: welcome.php"); // Redirecționați către pagina de bun venit
+            exit;
         } else {
-            echo "Parolă incorectă!";
+            $login_err = "Datele de autentificare sunt incorecte.";
         }
     } else {
-        echo "Utilizator inexistent!";
+        $login_err = "Utilizator inexistent!";
     }
+
+    $checkStmt->close();
 }
 
 $conn->close();
@@ -60,8 +73,8 @@ $conn->close();
         <input type="submit" value="Autentificare">
     </form>
     <?php
-    if (!empty($errorMessage)) {
-        echo '<p>' . $errorMessage . '</p>';
+    if (!empty($login_err)) {
+        echo '<p>' . $login_err . '</p>';
     }
     ?>
     <p>Nu ai un cont? <a href="register.php">Înregistrează-te aici</a>.</p>

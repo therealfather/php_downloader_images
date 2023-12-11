@@ -1,39 +1,47 @@
 <?php
-require_once 'config.php';
+// Conectare la baza de date
+$servername = "localhost:3006";
+$username = "root";
+$password = "";
+$dbname = "php_download_images";
 
-if ($_SERVER["REQUEST_METHOD"] == "GET" && isset($_GET["id"]) && !empty($_GET["id"])) {
-    $imageId = $_GET["id"];
+$conn = new mysqli($servername, $username, $password, $dbname);
 
-    // Obținem calea către imagine din baza de date
-    $stmt = $conn->prepare("SELECT link FROM linkuri WHERE id = ?");
-    $stmt->bind_param("i", $imageId);
+// Verificare dacă conexiunea la baza de date este stabilită
+if ($conn === null || $conn->connect_error) {
+    die("Conexiune esuata: " . ($conn ? $conn->connect_error : 'Conexiunea nu a fost stabilită.'));
+}
+
+// Verifică dacă este setat un ID valid
+if (isset($_GET['id']) && is_numeric($_GET['id'])) {
+    $download_id = $_GET['id'];
+
+    // Interogare pentru a obține informații despre fișierul de descărcat
+    $stmt = $conn->prepare("SELECT stored_name, original_name FROM downloads WHERE download_id = ?");
+    $stmt->bind_param("i", $download_id);
     $stmt->execute();
-    $stmt->store_result();
+    $stmt->bind_result($stored_name, $original_name);
+    $stmt->fetch();
+    $stmt->close();
 
-    if ($stmt->num_rows > 0) {
-        $stmt->bind_result($imageLink);
-        $stmt->fetch();
-        $stmt->close();
+    // Verifică dacă informațiile despre fișier există
+    if ($stored_name && $original_name) {
+        // Construiește calea la fișier în baza de date (presupunând că este un câmp BLOB)
+        $file_content = $stored_name;
 
-        $imagePath = "downloads/" . basename($imageLink);
+        // Setează antetele pentru descărcare
+        header('Content-Type: application/octet-stream');
+        header('Content-Transfer-Encoding: Binary');
+        header('Content-disposition: attachment; filename="' . $original_name . '"');
 
-        // Verificăm dacă fișierul există și este o imagine
-        $imageType = exif_imagetype($imagePath);
-
-        if ($imageType !== false) {
-            // Asigurăm că nu s-au emis date către browser înainte de setarea antetelor
-            ob_clean();
-
-            // Setăm tipul de conținut pentru a asigura descărcarea cu extensia corectă
-            header('Content-Type: application/octet-stream');
-            header('Content-Disposition: attachment; filename="' . basename($imagePath) . '"');
-            readfile($imagePath);
-            exit;
-        }
+        // Returnează conținutul fișierului către utilizator
+        echo $file_content;
+        exit;
     }
 }
 
-// Dacă nu s-a putut descărca imaginea sau parametrul "id" lipsește, redirecționăm utilizatorul către pagina de admin
-header("Location: admin.php");
-exit;
+// Dacă ajungem aici, există o problemă cu ID-ul primit
+echo "ID invalid sau fișierul nu există.";
+?>
+
 
